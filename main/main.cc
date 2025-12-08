@@ -9,11 +9,13 @@
 
 #include "application.h"
 #include "system_info.h"
+#include "uart_component.h"
 
 #define TAG "main"
 
 extern "C" void app_main(void)
 {
+    uart_init_component();
     // Initialize the default event loop
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 

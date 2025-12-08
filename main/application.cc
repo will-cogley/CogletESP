@@ -16,6 +16,7 @@
 #include <driver/gpio.h>
 #include <arpa/inet.h>
 #include <font_awesome.h>
+#include <uart_component.h>
 
 #define TAG "Application"
 
@@ -690,6 +691,7 @@ void Application::SetDeviceState(DeviceState state) {
             display->SetEmotion("neutral");
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(true);
+            uart_send_string("idle");
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
@@ -699,6 +701,7 @@ void Application::SetDeviceState(DeviceState state) {
         case kDeviceStateListening:
             display->SetStatus(Lang::Strings::LISTENING);
             display->SetEmotion("neutral");
+            uart_send_string("listening");
 
             // Make sure the audio processor is running
             if (!audio_service_.IsAudioProcessorRunning()) {
