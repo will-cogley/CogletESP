@@ -119,6 +119,7 @@ void Application::CheckAssetsVersion() {
     assets.Apply();
     display->SetChatMessage("system", "");
     display->SetEmotion("microchip_ai");
+    uart_send_string("configuring");
 }
 
 void Application::CheckNewVersion(Ota& ota) {
@@ -234,6 +235,7 @@ void Application::Alert(const char* status, const char* message, const char* emo
     auto display = Board::GetInstance().GetDisplay();
     display->SetStatus(status);
     display->SetEmotion(emotion);
+    uart_send_string(emotion);
     display->SetChatMessage("system", message);
     if (!sound.empty()) {
         audio_service_.PlaySound(sound);
@@ -245,6 +247,7 @@ void Application::DismissAlert() {
         auto display = Board::GetInstance().GetDisplay();
         display->SetStatus(Lang::Strings::STANDBY);
         display->SetEmotion("neutral");
+        uart_send_string("idle");
         display->SetChatMessage("system", "");
     }
 }
@@ -487,6 +490,7 @@ void Application::Start() {
             if (cJSON_IsString(emotion)) {
                 Schedule([this, display, emotion_str = std::string(emotion->valuestring)]() {
                     display->SetEmotion(emotion_str.c_str());
+                    uart_send_string(emotion_str.c_str());
                 });
             }
         } else if (strcmp(type->valuestring, "mcp") == 0) {

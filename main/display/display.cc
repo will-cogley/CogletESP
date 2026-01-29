@@ -11,6 +11,7 @@
 #include "audio_codec.h"
 #include "settings.h"
 #include "assets/lang_config.h"
+#include "uart_component.h"
 
 #define TAG "Display"
 
@@ -38,6 +39,7 @@ void Display::UpdateStatusBar(bool update_all) {
 
 void Display::SetEmotion(const char* emotion) {
     ESP_LOGW(TAG, "SetEmotion: %s", emotion);
+    uart_send_string(emotion);
 }
 
 void Display::SetChatMessage(const char* role, const char* content) {
