@@ -18,7 +18,7 @@ void uart_init_component() {
 
 void uart_send_string(const char* str) {
     uart_write_bytes(UART_PORT_NUM, str, strlen(str));
-}
+    uart_write_bytes(UART_PORT_NUM, "\r\n", 2);}
 
 void uart_signal_start() {
     uart_send_string("[SPEAK_START]\n");
