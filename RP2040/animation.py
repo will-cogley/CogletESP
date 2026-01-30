@@ -22,7 +22,7 @@ servos = {
 }
 
 def apply_pose(pose):
-    pose = pose_map.get(pose, pose_rest)
+    pose = pose_map.get(pose, pose_calibrate)
     for name, angle in pose.items():
         if name in servos:
             servos[name].set_target(angle)
@@ -47,14 +47,52 @@ pose_calibrate = { # Each dictionary key = servo name, value = angle
     "EAL": 90,
     "EAR": 90,
 }
+pose_sleep = { # Each dictionary key = servo name, value = angle
+#     "YAW": 88,
+#     "RWH": 89,
+    "ROL": 90,
+    "PIT": 80,
+    "MOU": 170,
+    "LID": 30,
+#     "EYL": 90,
+#     "EYR": 90,
+    "EAL": 150,
+    "EAR": 30,
+}
 
-pose_rest = { # Each dictionary key = servo name, value = angle
+pose_base = { # Each dictionary key = servo name, value = angle
 #     "YAW": 88,
 #     "RWH": 89,
     "ROL": 90,
 #     "PIT": 20,
-    "MOU": 170,
-    "LID": 130,
+#     "MOU": 170,
+    "LID": 150,
+#     "EYL": 90,
+#     "EYR": 90,
+    "EAL": 130,
+    "EAR": 70,
+}
+
+pose_speaking = { # Each dictionary key = servo name, value = angle
+#     "YAW": 88,
+#     "RWH": 89,
+#     "ROL": 90,
+#     "PIT": 20,
+    "MOU": 10,
+#     "LID": 130,
+#     "EYL": 90,
+#     "EYR": 90,
+    "EAL": 130,
+    "EAR": 70,
+}
+
+pose_stop_speaking = { # Each dictionary key = servo name, value = angle
+#     "YAW": 88,
+#     "RWH": 89,
+#     "ROL": 90,
+#     "PIT": 20,
+    "MOU": 150,
+#     "LID": 130,
 #     "EYL": 90,
 #     "EYR": 90,
     "EAL": 130,
@@ -80,7 +118,7 @@ pose_curious_2 = { # Each dictionary key = servo name, value = angle
     "ROL": 40,
 #     "PIT": 10,
     "MOU": 160,
-    "LID": 110,
+    "LID": 130,
 #     "EYL": 90,
 #     "EYR": 90,
     "EAL": 60,
@@ -89,9 +127,12 @@ pose_curious_2 = { # Each dictionary key = servo name, value = angle
 
 pose_map={
     "pose_calibrate": pose_calibrate,
-    "pose_rest": pose_rest,
+    "pose_base": pose_base,
     "pose_thinking_1": pose_thinking_1,
     "pose_curious_2": pose_curious_2,
+    "pose_sleep": pose_sleep,
+    "pose_speaking": pose_speaking,
+    "pose_stop_speaking": pose_stop_speaking,
 }
 
 #_________________#  #_________________#
@@ -101,13 +142,28 @@ pose_map={
 
 
 def state_startup():
-    apply_pose("pose_calibrate")   
+    global new_state_flag
+    if new_state_flag == True:
+        apply_pose("pose_calibrate")
+        new_state_flag = False
+
+def state_sleep():
+    global new_state_flag
+    if new_state_flag == True:
+        apply_pose("pose_sleep")
+        new_state_flag = False
+        
+def state_speaking():
+    global new_state_flag
+    if new_state_flag == True:
+        apply_pose("pose_speaking")
+        new_state_flag = False        
 
 def state_thinking():
     now=time.ticks_ms()
     global animation_bool_a, last_toggle_a, animation_bool_b, last_toggle_b, new_state_flag
     if new_state_flag == True:
-        apply_pose("pose_thinking_1")
+        apply_pose("pose_base")
         new_state_flag = False
     if animation_bool_a == False:
         servos["PIT"].set_target(50)
@@ -117,25 +173,24 @@ def state_thinking():
         animation_bool_a = not animation_bool_a   # flip the boolean
         last_toggle_a = now
         
-def state_talking():
-    now=time.ticks_ms()
-    global animation_bool_a, last_toggle_a, animation_bool_b, last_toggle_b, new_state_flag
-    if new_state_flag == True:
-        apply_pose("pose_rest")
-        new_state_flag = False
-    if animation_bool_a == False:
-        servos["MOU"].set_target(20)
-    if animation_bool_a == True:
-        servos["MOU"].set_target(120)
-    if time.ticks_diff(now, last_toggle_a) >= 150:
-        animation_bool_a = not animation_bool_a   # flip the boolean
-        last_toggle_a = now
         
-def state_idle():
+def state_listen():
+    global new_state_flag
+    if new_state_flag == True:
+        apply_pose("pose_curious_2")
+        new_state_flag = False
+        
+def state_neutral():
+    global new_state_flag
+    if new_state_flag == True:
+        apply_pose("pose_stop_speaking")
+        new_state_flag = False
+        
+def state_happy():
     now=time.ticks_ms()
     global animation_bool_a, last_toggle_a, animation_bool_b, last_toggle_b, new_state_flag
     if new_state_flag == True:
-        apply_pose("pose_rest")
+        apply_pose("pose_base")
         new_state_flag = False
 #     print("idle")
     if animation_bool_a == False:
@@ -155,13 +210,13 @@ def state_idle():
     if time.ticks_diff(now, last_toggle_b) >= 1000:
         animation_bool_b = not animation_bool_b   # flip the boolean
         last_toggle_b = now
-#         print("Toggled:", animation_bool_a)
+#         print("Toggled:", animation_bool_a)        
 
 def state_limber_up():
     now=time.ticks_ms()
     global animation_bool_a, last_toggle_a, animation_bool_b, last_toggle_b, new_state_flag
     if new_state_flag == True:
-        apply_pose("pose_rest")
+        apply_pose("pose_base")
         new_state_flag = False
 #     print("idle")
     if animation_bool_a == False:
@@ -197,11 +252,14 @@ def state_limber_up():
 #   - speaking
         
 state_map={  
-    "neutral": state_idle,
+    "neutral": state_neutral,
+    "idle": state_sleep,
+    "listening": state_listen,
     "state_startup": state_startup,
     "thinking": state_thinking,
-    "speaking": state_talking,
+    "speaking": state_speaking,
     "state_limber_up": state_limber_up,
+    "happy": state_happy
 }
 
 #_________________#  #_________________#            

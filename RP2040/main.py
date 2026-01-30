@@ -38,16 +38,19 @@ while True:
             rcvstate = line.decode().strip()
             print("RX:", rcvstate)
             if rcvstate in animation.state_map:
-                animation.apply_pose(rcvstate)
+                print("applying ", end="")
+                print(rcvstate)
+                animation.new_state_flag = True
+                animation.current_state = rcvstate
                 
-                
-#                 print("recognised")
     
 #     if (mode.value() == 0):
 #         animation.apply_state("state_limber_up")
 
     if (mode.value() == 1):
         animation.apply_pose("pose_calibrate")
+    
+    animation.apply_state(animation.current_state)
 
     for s in servos.values():
         s.update(dt)
