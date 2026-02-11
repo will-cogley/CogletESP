@@ -42,11 +42,11 @@
 #define CAMERA_PIN_D4 GPIO_NUM_12 // checked for CogNog V1.0
 #define CAMERA_PIN_D5 GPIO_NUM_39 // checked for CogNog V1.0 - original NUM_18
 #define CAMERA_PIN_D6 GPIO_NUM_40 // checked for CogNog V1.0 - original NUM_17
-#define CAMERA_PIN_D7 GPIO_NUM_14 // checked for CogNog V1.0 - original NUM_16
-#define CAMERA_PIN_XCLK GPIO_NUM_21 // checked for CogNog V1.0 - original NUM_15
+#define CAMERA_PIN_D7 GPIO_NUM_14 // checked for CogNog V1.0 - original NUM_16      << REWIRED IN PROTOTYPE P2 << 35->14
+#define CAMERA_PIN_XCLK GPIO_NUM_21 // checked for CogNog V1.0 - original NUM_15    
 #define CAMERA_PIN_PCLK GPIO_NUM_13 // checked for CogNog V1.0
-#define CAMERA_PIN_VSYNC GPIO_NUM_41 // checked for CogNog V1.0 - original NUM_6
-#define CAMERA_PIN_HREF GPIO_NUM_42 // checked for CogNog V1.0 - original NUM_7
+#define CAMERA_PIN_VSYNC GPIO_NUM_41 // checked for CogNog V1.0 - original NUM_6    << REWIRED IN PROTOTYPE P2 << 36->41
+#define CAMERA_PIN_HREF GPIO_NUM_42 // checked for CogNog V1.0 - original NUM_7     << REWIRED IN PROTOTYPE P2 << 37->42
 #define CAMERA_PIN_SIOC GPIO_NUM_47 // checked for CogNog V1.0 - original NUM_5
 #define CAMERA_PIN_SIOD GPIO_NUM_48 // checked for CogNog V1.0 - original NUM_4
 #define CAMERA_PIN_PWDN GPIO_NUM_NC
