@@ -11,12 +11,12 @@
 
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
 
-#define AUDIO_I2S_MIC_GPIO_WS   GPIO_NUM_1
-#define AUDIO_I2S_MIC_GPIO_SCK  GPIO_NUM_2
-#define AUDIO_I2S_MIC_GPIO_DIN  GPIO_NUM_42
-#define AUDIO_I2S_SPK_GPIO_DOUT GPIO_NUM_39
-#define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_40
-#define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_41
+#define AUDIO_I2S_MIC_GPIO_WS   GPIO_NUM_4  // checked for CogNog V1.0 - original NUM_1
+#define AUDIO_I2S_MIC_GPIO_SCK  GPIO_NUM_5 // checked for CogNog V1.0 - original NUM_2
+#define AUDIO_I2S_MIC_GPIO_DIN  GPIO_NUM_6 // checked for CogNog V1.0 - original NUM_42
+#define AUDIO_I2S_SPK_GPIO_DOUT GPIO_NUM_7 // checked for CogNog V1.0 - original NUM_39
+#define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_15 // checked for CogNog V1.0 - original NUM_40
+#define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_16 // checked for CogNog V1.0 - original NUM_41
 
 #else
 
@@ -28,38 +28,63 @@
 #endif
 
 
-#define BUILTIN_LED_GPIO        GPIO_NUM_48
+#define BUILTIN_LED_GPIO        GPIO_NUM_3 //changes from 48
 #define BOOT_BUTTON_GPIO        GPIO_NUM_0
 #define TOUCH_BUTTON_GPIO       GPIO_NUM_NC
 #define VOLUME_UP_BUTTON_GPIO   GPIO_NUM_NC
 #define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_NC
 
 //Camera Config
-#define CAMERA_PIN_D0 GPIO_NUM_11
-#define CAMERA_PIN_D1 GPIO_NUM_9
-#define CAMERA_PIN_D2 GPIO_NUM_8
-#define CAMERA_PIN_D3 GPIO_NUM_10
-#define CAMERA_PIN_D4 GPIO_NUM_12
-#define CAMERA_PIN_D5 GPIO_NUM_18
-#define CAMERA_PIN_D6 GPIO_NUM_17
-#define CAMERA_PIN_D7 GPIO_NUM_16
-#define CAMERA_PIN_XCLK GPIO_NUM_15
-#define CAMERA_PIN_PCLK GPIO_NUM_13
-#define CAMERA_PIN_VSYNC GPIO_NUM_6
-#define CAMERA_PIN_HREF GPIO_NUM_7
-#define CAMERA_PIN_SIOC GPIO_NUM_5
-#define CAMERA_PIN_SIOD GPIO_NUM_4
+#define CAMERA_PIN_D0 GPIO_NUM_11 // checked for CogNog V1.0
+#define CAMERA_PIN_D1 GPIO_NUM_9 // checked for CogNog V1.0
+#define CAMERA_PIN_D2 GPIO_NUM_8 // checked for CogNog V1.0
+#define CAMERA_PIN_D3 GPIO_NUM_10 // checked for CogNog V1.0
+#define CAMERA_PIN_D4 GPIO_NUM_12 // checked for CogNog V1.0
+#define CAMERA_PIN_D5 GPIO_NUM_39 // checked for CogNog V1.0 - original NUM_18
+#define CAMERA_PIN_D6 GPIO_NUM_40 // checked for CogNog V1.0 - original NUM_17
+#define CAMERA_PIN_D7 GPIO_NUM_14 // checked for CogNog V1.0 - original NUM_16
+#define CAMERA_PIN_XCLK GPIO_NUM_21 // checked for CogNog V1.0 - original NUM_15
+#define CAMERA_PIN_PCLK GPIO_NUM_13 // checked for CogNog V1.0
+#define CAMERA_PIN_VSYNC GPIO_NUM_41 // checked for CogNog V1.0 - original NUM_6
+#define CAMERA_PIN_HREF GPIO_NUM_42 // checked for CogNog V1.0 - original NUM_7
+#define CAMERA_PIN_SIOC GPIO_NUM_47 // checked for CogNog V1.0 - original NUM_5
+#define CAMERA_PIN_SIOD GPIO_NUM_48 // checked for CogNog V1.0 - original NUM_4
 #define CAMERA_PIN_PWDN GPIO_NUM_NC
 #define CAMERA_PIN_RESET GPIO_NUM_NC
 #define XCLK_FREQ_HZ 20000000
 
+#define DISPLAY_BACKLIGHT_PIN GPIO_NUM_NC // checked
+#define DISPLAY_MOSI_PIN      GPIO_NUM_NC // checked - original NUM_20
+#define DISPLAY_DC_PIN        GPIO_NUM_NC // checked - original NUM_47
+#define DISPLAY_RST_PIN       GPIO_NUM_NC // checked - original NUM_21
+#define DISPLAY_CS_PIN        GPIO_NUM_NC // checked - original NUM_47
 
-#define DISPLAY_BACKLIGHT_PIN GPIO_NUM_38
-#define DISPLAY_MOSI_PIN      GPIO_NUM_20
-#define DISPLAY_CLK_PIN       GPIO_NUM_19
-#define DISPLAY_DC_PIN        GPIO_NUM_47
-#define DISPLAY_RST_PIN       GPIO_NUM_21
-#define DISPLAY_CS_PIN        GPIO_NUM_45
+#define DISPLAY_CLK_PIN       GPIO_NUM_NC // I dont know whats going on here 
+
+// // Not sure about any of this ...
+
+// #define DISPLAY_SDA_PIN GPIO_NUM_41
+// #define DISPLAY_SCL_PIN GPIO_NUM_42
+// #define DISPLAY_WIDTH   128
+
+// #if CONFIG_OLED_SSD1306_128X32
+// #define DISPLAY_HEIGHT  32
+// #elif CONFIG_OLED_SSD1306_128X64
+// #define DISPLAY_HEIGHT  64
+// #elif CONFIG_OLED_SH1106_128X64
+// #define DISPLAY_HEIGHT  64
+// #define SH1106
+// #else
+// #error "未选择 OLED 屏幕类型"
+// #endif
+
+// #define DISPLAY_MIRROR_X true
+// #define DISPLAY_MIRROR_Y true
+
+// // Not sure about any of this ^^^
+
+
+
 
 
 #ifdef CONFIG_LCD_ST7789_240X320
@@ -303,6 +328,6 @@
 
 
 // A MCP Test: Control a lamp
-#define LAMP_GPIO GPIO_NUM_14
+#define LAMP_GPIO GPIO_NUM_2 //changed from 14 tp 2
 
 #endif // _BOARD_CONFIG_H_

@@ -18,6 +18,9 @@
 #include <esp_lcd_panel_ops.h>
 #include <driver/spi_common.h>
 
+#include "esp_log.h"
+#include "esp_rom_sys.h"
+
 #if defined(LCD_TYPE_ILI9341_SERIAL)
 #include "esp_lcd_ili9341.h"
 #endif
@@ -58,6 +61,34 @@ static const gc9a01_lcd_init_cmd_t gc9107_lcd_init_cmds[] = {
     {0xba, (uint8_t[]){0xFF, 0xFF}, 2, 0},
 };
 #endif
+
+// --- START CORRECTED DUMMY DISPLAY CLASS ---
+#include "display/display.h" 
+
+class DummyDisplay : public Display {
+public:
+    // Fix 1: Use the correct base constructor (no arguments)
+    DummyDisplay() : Display() {} 
+
+    // Fix 2: Implement the required "Pure Virtual" functions
+    // (These were missing, causing the "abstract class" error)
+    bool Lock(int timeout_ms = 0) override { return true; }
+    void Unlock() override {}
+
+    // Fix 3: Correct signatures for Notifications (Return void, accept duration)
+    // We override both versions (string and char*) to be safe.
+    void ShowNotification(const std::string &notification, int duration_ms = 3000) override {}
+    void ShowNotification(const char* notification, int duration_ms = 3000) override {}
+
+    // Fix 4: Correct signature for Chat Message (Must use const char*)
+    void SetChatMessage(const char* role, const char* content) override {}
+
+    // Note: We removed ShowStatus, SetIcon, Update, Draw, and Clear.
+    // The error logs indicated these are not virtual in the base class, 
+    // so we don't need to (and cannot) override them. 
+    // We simply inherit the empty/default behavior for those.
+};
+// --- END CORRECTED DUMMY DISPLAY CLASS ---
  
 #define TAG "CompactWifiBoardS3Cam"
 
@@ -65,7 +96,7 @@ class CompactWifiBoardS3Cam : public WifiBoard {
 private:
  
     Button boot_button_;
-    LcdDisplay* display_;
+    Display* display_;
      Esp32Camera* camera_;
 
     void InitializeSpi() {
@@ -126,6 +157,10 @@ private:
     }
 
     void InitializeCamera() {
+        esp_log_level_set("Esp32Camera", ESP_LOG_DEBUG);
+        esp_log_level_set("esp_video", ESP_LOG_DEBUG);
+        esp_log_level_set("video", ESP_LOG_DEBUG);
+
         static esp_cam_ctlr_dvp_pin_config_t dvp_pin_config = {
             .data_width = CAM_CTLR_DATA_WIDTH_8,
             .data_io = {
@@ -166,8 +201,14 @@ private:
             .dvp = &dvp_config,
         };
 
+        esp_rom_delay_us(20000); // 20 ms
         camera_ = new Esp32Camera(video_config);
-        camera_->SetHMirror(false);
+        ESP_LOGE("CAM", "camera ptr: %p", camera_);
+
+
+
+        camera_->SetHMirror(true);
+        camera_->SetVFlip(true);
     }
 
     void InitializeButtons() {
@@ -183,8 +224,20 @@ private:
 public:
     CompactWifiBoardS3Cam() :
         boot_button_(BOOT_BUTTON_GPIO) {
+
+        // FIX 1: Force release JTAG pins (39-42) for GPIO use
+        // This effectively disconnects the debugger so the Camera (39/40) 
+        // and LED (41) can use these pins.
+        // gpio_reset_pin(GPIO_NUM_39);
+        // gpio_reset_pin(GPIO_NUM_40);
+        // gpio_reset_pin(GPIO_NUM_41);
+        // gpio_reset_pin(GPIO_NUM_42);
+
         InitializeSpi();
-        InitializeLcdDisplay();
+        // InitializeLcdDisplay();
+
+        display_ = new DummyDisplay();
+
         InitializeButtons();
         InitializeCamera();
         if (DISPLAY_BACKLIGHT_PIN != GPIO_NUM_NC) {
