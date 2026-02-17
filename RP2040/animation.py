@@ -1,7 +1,7 @@
 from servoclass import Servo
 import time
 
-current_pose = "pose_calibrate"
+current_pose = "pose_base"
 current_state = "state_startup"
 animation_bool_a = False
 animation_bool_b = False
@@ -14,8 +14,8 @@ servos = {
     "ROL": Servo(pin_num=7, max_speed=600, max_accel=400, min_angle=30, max_angle=120), #Neck Roll
     "PIT": Servo(pin_num=8, max_speed=600, max_accel=400, min_angle=1, max_angle=80), #Neck Pitch
     "MOU": Servo(pin_num=9, max_speed=50000, max_accel=10000, min_angle=5, max_angle=150), #Mouth
-    "EYL": Servo(pin_num=12, max_speed=200, max_accel=10000, min_angle=30, max_angle=150), #Left Eyeball
-    "EYR": Servo(pin_num=13, max_speed=250, max_accel=10000, min_angle=30, max_angle=150), #Right Eyeball
+    "EYL": Servo(pin_num=12, max_speed=200, max_accel=500, min_angle=30, max_angle=150), #Left Eyeball
+    "EYR": Servo(pin_num=13, max_speed=250, max_accel=500, min_angle=30, max_angle=150), #Right Eyeball
     "LID": Servo(pin_num=14, max_speed=50000, max_accel=50000, min_angle=30, max_angle=160), #EyeLid
     "EAL": Servo(pin_num=15, max_speed=250, max_accel=200, min_angle=60, max_angle=150), #Left Ear
     "EAR": Servo(pin_num=16, max_speed=500, max_accel=200, min_angle=30, max_angle=120), #Right Ear
@@ -66,7 +66,7 @@ pose_base = { # Each dictionary key = servo name, value = angle
     "ROL": 90,
 #     "PIT": 20,
 #     "MOU": 170,
-    "LID": 150,
+    "LID": 110,
 #     "EYL": 90,
 #     "EYR": 90,
     "EAL": 130,
@@ -144,7 +144,7 @@ pose_map={
 def state_startup():
     global new_state_flag
     if new_state_flag == True:
-        apply_pose("pose_calibrate")
+        apply_pose("pose_base")
         new_state_flag = False
 
 def state_sleep():
@@ -263,5 +263,6 @@ state_map={
 }
 
 #_________________#  #_________________#            
+
 
 

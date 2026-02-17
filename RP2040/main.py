@@ -6,10 +6,8 @@ from servoclass import Servo
 import sys, select, uselect
 import math
 import animation
+import coms
 from animation import servos
-
-ESP = UART(1, baudrate=115200, tx=Pin(4), rx=Pin(5))
-rx_buffer = b""
 
 mode = Pin(20, Pin.IN, Pin.PULL_UP)
 
@@ -19,46 +17,65 @@ directions = {name: 1 for name in servos.keys()}
 last_time = time.ticks_ms()
 last_switch = last_time
 
-# servos["YAW"].set_target(88)
-# # servos["RWH"].set_target(89)
+animation.servos["YAW"].set_target(90)
 
+yaw_target = 100
+yaw_countdown = yaw_target
 
 while True:
     now = time.ticks_ms()
     dt = time.ticks_diff(now, last_time) / 1000.0
     last_time = now
     
-#     # check if blink should finish
-#     update_blink(servos, now, lid="LID")
-    
-    if ESP.any():
-        rx_buffer += ESP.read()   # bytes + bytes = OK
-        while b"\n" in rx_buffer:
-            line, rx_buffer = rx_buffer.split(b"\n", 1)
-            rcvstate = line.decode().strip()
-            print("RX:", rcvstate)
-            if rcvstate in animation.state_map:
-                print("applying ", end="")
-                print(rcvstate)
-                animation.new_state_flag = True
-                animation.current_state = rcvstate
-                
-    
-#     if (mode.value() == 0):
-#         animation.apply_state("state_limber_up")
+    if not animation.current_state == "speaking":
+        if (offset := coms.grove_read()):
+            dead = coms.deadzone
+            static = coms.staticflag
 
-    if (mode.value() == 1):
-        animation.apply_pose("pose_calibrate")
+            eyl = animation.servos["EYL"]
+            eyr = animation.servos["EYR"]
+            pit = animation.servos["PIT"]
+
+            x0, y0 = offset
+            x_scale = coms.x_adj_factor / 110
+            y_scale = coms.y_adj_factor / 110
+
+            if not static:
+                if abs(x0) > dead:
+                    x = eyl.target + x0 * x_scale
+                    eyl.set_target(x)
+                    eyr.set_target(x)
+
+                if abs(y0) > dead:
+                    y = pit.target + y0 * y_scale
+                    pit.set_target(y)
+                    
+        if abs(90 - animation.servos["EYL"].target) >= 20:
+            yaw_countdown -= 1
+            if yaw_countdown <= 0:
+                animation.servos["YAW"].set_target(90 + ((animation.servos["EYL"].target-90)/2))
+                yaw_countdown = yaw_target
+        
+    if (data := coms.ESP_read()):
+        print(data)
+        animation.new_state_flag = True
+        animation.current_state = data
     
-    animation.apply_state(animation.current_state)
+    if (mode.value() == 1):
+        animation.apply_pose("pose_base") # change this back to calibrate to keep calibration mode
+    else:
+        animation.apply_state(animation.current_state)
 
     for s in servos.values():
         s.update(dt)
-    time.sleep_ms(1)
+#     time.sleep_ms(1)
     
 #     # EXAMPLE: randomly trigger a blink
 #     if not blink_state["active"] and (random.randint(0, 1000)<1):
 #         trigger_blink(servos, now, closed_angle=30, lid="LID")
+
+#     # check if blink should finish
+#     update_blink(servos, now, lid="LID")
 
 # blink_state = {
 #     "active": False,
@@ -84,3 +101,4 @@ while True:
 #             s = servos[lid]
 #             s.set_target(blink_state["original_pos"])  # restore old target
 #             blink_state["active"] = False
+

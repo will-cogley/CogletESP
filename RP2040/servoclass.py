@@ -107,3 +107,4 @@ class Servo:
         # convert to 16-bit duty for 20 ms period
         duty = int(us * 65535.0 / 20000.0)
         self.pwm.duty_u16(duty)
+
