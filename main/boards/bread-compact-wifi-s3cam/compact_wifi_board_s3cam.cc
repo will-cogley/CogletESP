@@ -228,10 +228,10 @@ public:
         // FIX 1: Force release JTAG pins (39-42) for GPIO use
         // This effectively disconnects the debugger so the Camera (39/40) 
         // and LED (41) can use these pins.
-        // gpio_reset_pin(GPIO_NUM_39);
-        // gpio_reset_pin(GPIO_NUM_40);
-        // gpio_reset_pin(GPIO_NUM_41);
-        // gpio_reset_pin(GPIO_NUM_42);
+        gpio_reset_pin(GPIO_NUM_39);
+        gpio_reset_pin(GPIO_NUM_40);
+        gpio_reset_pin(GPIO_NUM_41);
+        gpio_reset_pin(GPIO_NUM_42);
 
         InitializeSpi();
         // InitializeLcdDisplay();
