@@ -13,7 +13,7 @@ servos = {
     "YAW": Servo(pin_num=6, max_speed=400, max_accel=100, min_angle=10, max_angle=170), #Base Yaw Rotation
     "ROL": Servo(pin_num=7, max_speed=600, max_accel=400, min_angle=30, max_angle=120), #Neck Roll
     "PIT": Servo(pin_num=8, max_speed=600, max_accel=400, min_angle=1, max_angle=80), #Neck Pitch
-    "MOU": Servo(pin_num=9, max_speed=50000, max_accel=10000, min_angle=5, max_angle=150), #Mouth
+    "MOU": Servo(pin_num=9, max_speed=5000, max_accel=1000, min_angle=5, max_angle=150), #Mouth
     "EYL": Servo(pin_num=12, max_speed=200, max_accel=500, min_angle=30, max_angle=150), #Left Eyeball
     "EYR": Servo(pin_num=13, max_speed=250, max_accel=500, min_angle=30, max_angle=150), #Right Eyeball
     "LID": Servo(pin_num=14, max_speed=100000, max_accel=7000, min_angle=30, max_angle=160), #EyeLid
@@ -78,7 +78,7 @@ pose_speaking = { # Each dictionary key = servo name, value = angle
 #     "RWH": 89,
 #     "ROL": 90,
 #     "PIT": 20,
-    "MOU": 10,
+#     "MOU": 10,
 #     "LID": 130,
 #     "EYL": 90,
 #     "EYR": 90,
@@ -161,8 +161,10 @@ def state_sleep():
         
 def state_speaking():
     global new_state_flag
+    animation.servos["MOU"]._write_pwm(10)
     if new_state_flag == True:
         apply_pose("pose_speaking")
+#         animation.servos["MOU"]._write_pwm(10)
         new_state_flag = False        
 
 def state_thinking():
@@ -270,6 +272,7 @@ state_map={
 }
 
 #_________________#  #_________________#            
+
 
 
 

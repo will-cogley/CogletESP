@@ -12,6 +12,8 @@ from animation import servos
 mode = Pin(20, Pin.IN, Pin.PULL_UP)
 LED = Pin(25, Pin.OUT)
 
+external = coms.Comms()
+
 # track direction for each servo (1 = going to max, -1 = going to min)
 directions = {name: 1 for name in servos.keys()}
 
@@ -37,13 +39,13 @@ def facetrack():
         pit = animation.servos["PIT"]
         yaw = animation.servos["YAW"]
         
-        if (offset := coms.grove_read()):
-            dead = coms.deadzone
-            static = coms.staticflag
+        if (offset := external.grove_read()):
+            dead = external.deadzone
+            static = external.staticflag
 
             x0, y0 = offset
-            x_scale = coms.x_adj_factor / 110
-            y_scale = coms.y_adj_factor / 110
+            x_scale = external.x_adj_factor / 110
+            y_scale = external.y_adj_factor / 110
 
             if not static:
                 if abs(x0) > dead:
@@ -68,22 +70,20 @@ while True:
     now = time.ticks_ms()
     dt = time.ticks_diff(now, last_time) / 1000.0
     last_time = now
-    
-#     print(time.ticks_ms()-on_time)
-    
+        
     facetrack()
 
     if not blinking and random.randrange(500) == 0:
         blinking = True
         blink_counter = blink_time
          
-    if (data := coms.ESP_read()):
+    if (data := external.esp_read()):
         print(data)
         animation.new_state_flag = True
         animation.current_state = data
         
     if blinking and animation.current_state != "idle":
-        if blink_counter > blink_time - 10:
+        if blink_counter > blink_time - 80:
             # closed
             animation.servos["LID"]._write_pwm(30)
         elif blink_counter > 0:
@@ -106,46 +106,8 @@ while True:
              animation.apply_state("neutral")
 #             animation.apply_state(animation.current_state)
         
-
-    
-
     for name, s in servos.items():
         if name == "LID":
             continue
         s.update(dt)
         
-#     time.sleep_ms(10)
-    
-#     # EXAMPLE: randomly trigger a blink
-#     if not blink_state["active"] and (random.randint(0, 1000)<1):
-#         trigger_blink(servos, now, closed_angle=30, lid="LID")
-
-#     # check if blink should finish
-#     update_blink(servos, now, lid="LID")
-
-# blink_state = {
-#     "active": False,
-#     "start_time": 0,
-#     "duration": 150,   # ms lids stay closed
-#     "original_pos": None,
-# }
-# 
-# 
-# 
-# def trigger_blink(servos, now, closed_angle=30, lid="LID"):
-#     if blink_state["active"]:
-#         return  # already blinking, ignore
-#     s = servos["LID"]
-#     blink_state["active"] = True
-#     blink_state["start_time"] = now
-#     blink_state["original_pos"] = s.target  # remember current target
-#     s.set_target(s.min_angle)  # snap to closed target
-# 
-# def update_blink(servos, now, lid="LID"):
-#     if blink_state["active"]:
-#         if time.ticks_diff(now, blink_state["start_time"]) > blink_state["duration"]:
-#             s = servos[lid]
-#             s.set_target(blink_state["original_pos"])  # restore old target
-#             blink_state["active"] = False
-
-
