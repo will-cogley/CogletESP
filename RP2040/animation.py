@@ -16,7 +16,7 @@ servos = {
     "MOU": Servo(pin_num=9, max_speed=50000, max_accel=10000, min_angle=5, max_angle=150), #Mouth
     "EYL": Servo(pin_num=12, max_speed=200, max_accel=500, min_angle=30, max_angle=150), #Left Eyeball
     "EYR": Servo(pin_num=13, max_speed=250, max_accel=500, min_angle=30, max_angle=150), #Right Eyeball
-    "LID": Servo(pin_num=14, max_speed=50000, max_accel=50000, min_angle=30, max_angle=160), #EyeLid
+    "LID": Servo(pin_num=14, max_speed=100000, max_accel=7000, min_angle=30, max_angle=160), #EyeLid
     "EAL": Servo(pin_num=15, max_speed=250, max_accel=200, min_angle=60, max_angle=150), #Left Ear
     "EAR": Servo(pin_num=16, max_speed=500, max_accel=200, min_angle=30, max_angle=120), #Right Ear
 }
@@ -66,7 +66,7 @@ pose_base = { # Each dictionary key = servo name, value = angle
     "ROL": 90,
 #     "PIT": 20,
 #     "MOU": 170,
-    "LID": 110,
+#     "LID": 130,
 #     "EYL": 90,
 #     "EYR": 90,
     "EAL": 130,
@@ -105,7 +105,7 @@ pose_thinking_1 = { # Each dictionary key = servo name, value = angle
     "ROL": 130,
 #     "PIT": 50,
     "MOU": 150,
-    "LID": 70,
+#     "LID": 70,
 #     "EYL": 90,
 #     "EYR": 90,
     "EAL": 150,
@@ -118,7 +118,7 @@ pose_curious_2 = { # Each dictionary key = servo name, value = angle
     "ROL": 40,
 #     "PIT": 10,
     "MOU": 160,
-    "LID": 130,
+#     "LID": 130,
 #     "EYL": 90,
 #     "EYR": 90,
     "EAL": 60,
@@ -144,8 +144,14 @@ pose_map={
 def state_startup():
     global new_state_flag
     if new_state_flag == True:
-        apply_pose("pose_base")
+        apply_pose("pose_calibrate")
         new_state_flag = False
+        
+def state_calibrate():
+    global new_state_flag
+#     if new_state_flag == True:
+    apply_pose("pose_calibrate")
+    new_state_flag = False
 
 def state_sleep():
     global new_state_flag
@@ -259,10 +265,13 @@ state_map={
     "thinking": state_thinking,
     "speaking": state_speaking,
     "state_limber_up": state_limber_up,
-    "happy": state_happy
+    "happy": state_happy,
+    "state_calibrate": state_calibrate
 }
 
 #_________________#  #_________________#            
+
+
 
 
 
