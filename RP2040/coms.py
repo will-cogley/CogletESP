@@ -26,18 +26,23 @@ class Comms:
         return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
     def esp_read(self):
+        # 1. Read new data if there is any
         if self.esp.any():
-            # Read all available bytes in one operation
             self.rx_buffer += self.esp.read()
             
-            # Process complete lines
-            while b"\n" in self.rx_buffer:
-                line, self.rx_buffer = self.rx_buffer.split(b"\n", 1)
-                rcvstate = line.decode('utf-8').strip()
+        # 2. Extract ALL complete lines currently in the buffer
+        # Notice this is OUTSIDE the `if self.esp.any():` block!
+        commands = []
+        while b"\n" in self.rx_buffer:
+            line, self.rx_buffer = self.rx_buffer.split(b"\n", 1)
+            rcvstate = line.decode('utf-8').strip()
+            
+            # Add to our list instead of returning immediately
+            if rcvstate: # Just to ignore empty blank lines
+                commands.append(rcvstate)
                 
-                if rcvstate in animation.state_map:
-                    return rcvstate
-        return None
+        # Return the list of commands (might be empty, might have 1, might have 3!)
+        return commands
 
     def grove_read(self):
         # State 1: Requesting data
@@ -96,4 +101,3 @@ class Comms:
                             return None
                             
         return None
-

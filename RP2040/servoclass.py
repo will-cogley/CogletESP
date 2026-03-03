@@ -91,4 +91,3 @@ class Servo:
         # PERFORMANCE: Single multiplication and addition
         duty = int(self._pwm_offset + self._pwm_slope * angle)
         self.pwm.duty_u16(duty)
-
