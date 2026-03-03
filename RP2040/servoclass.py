@@ -34,7 +34,8 @@ class Servo:
         # debug flag
         self.enabled = enabled
 
-        self._write_pwm(self.pos)
+        # Start limp to prevent power spike on startup
+        self.pwm.duty_u16(0)
 
     def set_target(self, angle):
         # Inline clamp to save function call overhead

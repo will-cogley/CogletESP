@@ -10,6 +10,7 @@ last_toggle_a = time.ticks_ms()
 last_toggle_b = time.ticks_ms()
 new_state_flag = False
 
+
 servos = {
     "YAW": Servo(pin_num=6, max_speed=400, max_accel=100, min_angle=10, max_angle=170), #Base Yaw Rotation
     "ROL": Servo(pin_num=7, max_speed=600, max_accel=400, min_angle=30, max_angle=120), #Neck Roll

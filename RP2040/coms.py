@@ -21,6 +21,8 @@ class Comms:
         self.rx_buffer = b""
         self.readflag = True
         self.last_boxes = None
+        
+        self.grove.write(self.INVOKE_CMD)
 
     def map_value(self, value, in_min, in_max, out_min, out_max):
         return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -101,3 +103,4 @@ class Comms:
                             return None
                             
         return None
+

@@ -11,6 +11,16 @@ from animation import servos
 
 mode = Pin(20, Pin.IN, Pin.PULL_UP)
 LED = Pin(25, Pin.OUT)
+yaw_target = 100
+yaw_countdown = yaw_target
+LED_oscillator = 25
+LED_countdown = LED_oscillator
+blink_time = 500
+blinking = False
+speaking_flag = False
+speaking_timer = 0
+bool_a = False
+last_toggle_a= time.ticks_ms()
 
 external = coms.Comms()
 
@@ -20,13 +30,7 @@ directions = {name: 1 for name in servos.keys()}
 last_time = time.ticks_ms()
 last_switch = last_time
 
-animation.servos["YAW"].set_target(90)
-
-yaw_target = 100
-yaw_countdown = yaw_target
-
-LED_oscillator = 25
-LED_countdown = LED_oscillator
+# animation.servos["YAW"].set_target(90)
 
 on_time = time.ticks_ms()
 startup_sleep = True
@@ -63,14 +67,34 @@ def facetrack():
                 yaw.set_target(90 + ((eyl.target-90)/2))
                 yaw_countdown = yaw_target
                 
-blink_time = 500
-blinking = False
+# --- STAGGERED STARTUP SEQUENCE ---
+time.sleep(0.5) # Allow board power to stabilize after boot
 
-bool_a = False
-last_toggle_a= time.ticks_ms()
+# Determine the correct initial pose based on the calibration pin
+is_calibrating = (mode.value() == 1)
+initial_pose_dict = animation.pose_calibrate if is_calibrating else animation.pose_sleep
 
-speaking_flag = False
-speaking_timer = 0
+print("Initiating staggered servo wakeup...")
+for name, servo_obj in animation.servos.items():
+    # Fetch the target angle for this specific pose (default to 90 if missing)
+    start_angle = initial_pose_dict.get(name, 90)
+    
+    # Pre-set the internal tracking positions so the servo math doesn't think it's moving from 90
+    servo_obj.pos = start_angle
+    servo_obj.target = start_angle
+    
+    # Send the first pulse. If physically elsewhere, it will snap, but ALONE.
+    servo_obj._write_pwm(start_angle)
+    
+    # Stagger the wakeups. Fast if calibrating, slow and gentle if sleeping.
+    delay_ms = 50 if is_calibrating else 250
+    time.sleep_ms(delay_ms)
+
+# Set initial states to match the startup logic
+animation.current_state = "state_calibrate" if is_calibrating else "idle"
+animation.previous_state = animation.current_state
+print("Startup complete.")
+# ----------------------------------
 
 while True:
     # Update time 
@@ -80,24 +104,18 @@ while True:
         
     # Grab all pending commands from the ESP
     incoming_commands = external.esp_read()
-    
-    # Process them one by one
     for data in incoming_commands:
-        print(data)
         if data in animation.state_map:
             animation.new_state_flag = True
             animation.current_state = data
             
-    if animation.current_state != "idle":
-        facetrack() 
-        
     # 2. Check if the state changed this frame
     if animation.current_state != animation.previous_state:
         if animation.current_state == "speaking":
             speaking_flag = True
         elif animation.current_state in ["neutral", "idle", "listening"]:
             if speaking_flag:
-                print("stop talking (interrupted by new state)")
+#                 print("stop talking (interrupted by new state)")
                 speaking_flag = False
                 
                 # CRITICAL: Snap the mouth closed when speech ends!
@@ -137,7 +155,8 @@ while True:
             animation.servos["LID"]._write_pwm(30)
         else:
             if animation.previous_state == "idle":
-                animation.servos["LID"]._write_pwm(110)  
+                animation.servos["LID"]._write_pwm(110)
+                animation.servos["PIT"].set_target(10)
             # Blink mode   
             if blinking and animation.current_state != "idle":
                 if blink_counter > blink_time - 50:
@@ -154,6 +173,8 @@ while True:
             animation.apply_state(animation.current_state)                   
                 
     animation.previous_state = animation.current_state
+    
+    facetrack() 
 
     # Update all servos except eyelids
     for name, s in servos.items():
