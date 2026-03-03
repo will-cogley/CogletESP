@@ -37,13 +37,18 @@ startup_sleep = True
 
 def facetrack():
     global yaw_countdown, yaw_target
-    if not animation.current_state == "speaking":
+    
+    # ALWAYS read the sensor to prevent serial buffer overflows!
+    offset = external.grove_read()
+    
+    # Only move the servos if the robot is awake
+    if animation.current_state != "idle":
         eyl = animation.servos["EYL"]
         eyr = animation.servos["EYR"]
         pit = animation.servos["PIT"]
         yaw = animation.servos["YAW"]
         
-        if (offset := external.grove_read()):
+        if offset:
             dead = external.deadzone
             static = external.staticflag
 
@@ -60,7 +65,7 @@ def facetrack():
                 if abs(y0) > dead:
                     y = pit.target + y0 * y_scale
                     pit.set_target(y)
-#                     
+                    
         if abs(90 - eyl.target) >= 20:
             yaw_countdown -= 1
             if yaw_countdown <= 0:
@@ -96,83 +101,89 @@ animation.previous_state = animation.current_state
 print("Startup complete.")
 # ----------------------------------
 
+# external.grove_invoke()
+
+FTDebug = False # setting to True isolates the face tracking code 
+
 while True:
     # Update time 
     now = time.ticks_ms() 
     dt = time.ticks_diff(now, last_time) / 1000.0
     last_time = now
-        
-    # Grab all pending commands from the ESP
-    incoming_commands = external.esp_read()
-    for data in incoming_commands:
-        if data in animation.state_map:
-            animation.new_state_flag = True
-            animation.current_state = data
-            
-    # 2. Check if the state changed this frame
-    if animation.current_state != animation.previous_state:
-        if animation.current_state == "speaking":
-            speaking_flag = True
-        elif animation.current_state in ["neutral", "idle", "listening"]:
-            if speaking_flag:
-#                 print("stop talking (interrupted by new state)")
-                speaking_flag = False
+      
+    if FTDebug == False:  
+        # Grab all pending commands from the ESP
+        incoming_commands = external.esp_read()
+        for data in incoming_commands:
+            if data in animation.state_map:
+                animation.new_state_flag = True
+                animation.current_state = data
                 
-                # CRITICAL: Snap the mouth closed when speech ends!
-                animation.servos["MOU"].set_target(130)
-                
-    # 3. Speaking timer / animation
-    if speaking_flag:
-        # Set the mouth position based on the current toggle state
-        if bool_a == False:
-            animation.servos["MOU"].set_target(130)
-        elif bool_a == True:
-            animation.servos["MOU"].set_target(70)
-            
-        # Flip the boolean every 250ms to flap the mouth
-        if time.ticks_diff(now, last_toggle_a) >= 250:
-            bool_a = not bool_a   # flip the boolean
-            last_toggle_a = now
-
-
-    # Blink mode enabler
-    if not blinking and random.randrange(500) == 0: 
-        blinking = True
-        blink_counter = blink_time
-         
-
-        # Calibration mode 
-    if (mode.value() == 1):
-        animation.current_state = "state_calibrate"
-        animation.apply_state("state_calibrate") # change this back to calibrate to keep calibration mode/base for testing
-        LED_countdown -= 1
-        if LED_countdown <= 0:
-            LED.toggle()
-            LED_countdown = LED_oscillator
-    else:
-        if animation.current_state == "idle":
-            animation.apply_state("idle")
-            animation.servos["LID"]._write_pwm(30)
-        else:
-            if animation.previous_state == "idle":
-                animation.servos["LID"]._write_pwm(110)
-                animation.servos["PIT"].set_target(10)
-            # Blink mode   
-            if blinking and animation.current_state != "idle":
-                if blink_counter > blink_time - 50:
-                    # closed
-                    animation.servos["LID"]._write_pwm(30)
-                elif blink_counter > 0:
-                    # reopen
-                    animation.servos["LID"]._write_pwm(110)
-                blink_counter -= 1
-                if blink_counter == 0:
-                    blinking = False
+        # 2. Check if the state changed this frame
+        if animation.current_state != animation.previous_state:
+            if animation.current_state == "speaking":
+                speaking_flag = True
+            elif animation.current_state in ["neutral", "idle", "listening"]:
+                if speaking_flag:
+                    speaking_flag = False
+                    # Snap the mouth closed when speech ends!
+                    animation.servos["MOU"].set_target(130)
                     
-            # Update with whatever state the ESP says
-            animation.apply_state(animation.current_state)                   
+        # 3. Speaking timer / animation
+        if speaking_flag:
+            # Set the mouth position based on the current toggle state
+            if bool_a == False:
+                animation.servos["MOU"].set_target(130)
+            elif bool_a == True:
+                animation.servos["MOU"].set_target(70)
                 
-    animation.previous_state = animation.current_state
+            # Flip the boolean every 250ms to flap the mouth
+            if time.ticks_diff(now, last_toggle_a) >= 250:
+                bool_a = not bool_a   # flip the boolean
+                last_toggle_a = now
+
+
+        # Blink mode enabler
+        if not blinking and random.randrange(500) == 0: 
+            blinking = True
+            blink_counter = blink_time
+             
+
+            # Calibration mode 
+        if (mode.value() == 1):
+            animation.current_state = "state_calibrate"
+            animation.apply_state("state_calibrate") # change this back to calibrate to keep calibration mode/base for testing
+            LED_countdown -= 1
+            if LED_countdown <= 0:
+                LED.toggle()
+                LED_countdown = LED_oscillator
+        else:
+            if animation.current_state == "idle":
+                animation.apply_state("idle")
+                animation.servos["LID"]._write_pwm(30)
+            else:
+                if animation.previous_state == "idle":
+                    animation.servos["LID"]._write_pwm(110)
+                    animation.servos["PIT"].set_target(10)
+                # Blink mode   
+                if blinking and animation.current_state != "idle":
+                    if blink_counter > blink_time - 50:
+                        # closed
+                        animation.servos["LID"]._write_pwm(30)
+                    elif blink_counter > 0:
+                        # reopen
+                        animation.servos["LID"]._write_pwm(110)
+                    blink_counter -= 1
+                    if blink_counter == 0:
+                        blinking = False
+                        
+                # Update with whatever state the ESP says
+                animation.apply_state(animation.current_state)                   
+                    
+        animation.previous_state = animation.current_state
+    else:
+        animation.servos["LID"]._write_pwm(110)
+        animation.current_state = "neutral"
     
     facetrack() 
 
