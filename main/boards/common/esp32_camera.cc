@@ -9,6 +9,8 @@
 #include <cstring>
 
 #include "esp_imgfx_color_convert.h"
+#include "esp_cam_sensor.h"
+#include "esp_video_ioctl.h"
 #include "esp_video_device.h"
 #include "esp_video_init.h"
 #include "linux/videodev2.h"
@@ -99,6 +101,7 @@ Esp32Camera::Esp32Camera(const esp_video_init_config_t& config) {
         ESP_LOGE(TAG, "esp_video_init failed");
         return;
     }
+    video_initialized_ = true;
 
 #ifdef CONFIG_XIAOZHI_ENABLE_CAMERA_DEBUG_MODE
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
@@ -263,6 +266,8 @@ Esp32Camera::Esp32Camera(const esp_video_init_config_t& config) {
         sensor_format_ = 0;
         return;
     }
+    
+    
 
 #ifdef CONFIG_XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
     frame_.width = setformat.fmt.pix.height;
@@ -375,7 +380,10 @@ Esp32Camera::~Esp32Camera() {
         video_fd_ = -1;
     }
     sensor_format_ = 0;
-    esp_video_deinit();
+    if (video_initialized_) {
+        esp_video_deinit();
+        video_initialized_ = false;
+    }
 }
 
 void Esp32Camera::SetExplainUrl(const std::string& url, const std::string& token) {
@@ -452,21 +460,13 @@ bool Esp32Camera::Capture() {
                     frame_.format = sensor_format_;
                     break;
                 case V4L2_PIX_FMT_YUV422P: {
-                    // 这个格式是 422 YUYV，不是 planer
+                    // esp_video 1.x reports the packed GC0308 stream as
+                    // YUV422P. The two byte-order experiments were both
+                    // visually wrong, so keep the sensor byte stream intact
+                    // and let the established YUYV conversion path consume it.
                     frame_.format = V4L2_PIX_FMT_YUYV;
-#ifdef CONFIG_XIAOZHI_ENABLE_CAMERA_ENDIANNESS_SWAP
-                    {
-                        auto src16 = (uint16_t*)mmap_buffers_[buf.index].start;
-                        auto dst16 = (uint16_t*)frame_.data;
-                        size_t count = (size_t)mmap_buffers_[buf.index].length / 2;
-                        for (size_t i = 0; i < count; i++) {
-                            dst16[i] = __builtin_bswap16(src16[i]);
-                        }
-                    }
-#else
                     memcpy(frame_.data, mmap_buffers_[buf.index].start,
                            MIN(mmap_buffers_[buf.index].length, frame_.len));
-#endif  // CONFIG_XIAOZHI_ENABLE_CAMERA_ENDIANNESS_SWAP
                     break;
                 }
                 case V4L2_PIX_FMT_RGB565X: {
@@ -835,6 +835,162 @@ bool Esp32Camera::Capture() {
         auto image = std::make_unique<LvglAllocatedImage>(data, lvgl_image_size, w, h, stride, color_format);
         display->SetPreviewImage(std::move(image));
     }
+    return true;
+}
+
+bool Esp32Camera::SensorPrivateIoctl(uint32_t command, void* data, size_t size, bool write) {
+    if (video_fd_ < 0 || data == nullptr || size == 0) {
+        return false;
+    }
+
+    struct v4l2_ext_control control = {};
+    control.id = command;
+    control.p_u8 = static_cast<uint8_t*>(data);
+    control.size = size;
+
+    struct v4l2_ext_controls controls = {};
+    controls.ctrl_class = V4L2_CTRL_CLASS_ESP_CAM_IOCTL;
+    controls.count = 1;
+    controls.controls = &control;
+
+    const unsigned long request = write ? VIDIOC_S_EXT_CTRLS : VIDIOC_G_EXT_CTRLS;
+    if (ioctl(video_fd_, request, &controls) != 0) {
+        ESP_LOGE(TAG,
+                 "sensor private ioctl failed: cmd=0x%08lx, write=%d, errno=%d(%s)",
+                 static_cast<unsigned long>(command),
+                 write ? 1 : 0,
+                 errno,
+                 strerror(errno));
+        return false;
+    }
+    return true;
+}
+
+bool Esp32Camera::ReadSensorRegister(uint16_t reg, uint8_t& value) {
+    esp_cam_sensor_reg_val_t reg_value = {};
+    reg_value.regaddr = reg;
+    if (!SensorPrivateIoctl(ESP_CAM_SENSOR_IOC_G_REG,
+                            &reg_value,
+                            sizeof(reg_value),
+                            false)) {
+        return false;
+    }
+    value = reg_value.value;
+    return true;
+}
+
+bool Esp32Camera::WriteSensorRegister(uint16_t reg, uint8_t value) {
+    esp_cam_sensor_reg_val_t reg_value = {};
+    reg_value.regaddr = reg;
+    reg_value.value = value;
+    return SensorPrivateIoctl(ESP_CAM_SENSOR_IOC_S_REG,
+                              &reg_value,
+                              sizeof(reg_value),
+                              true);
+}
+
+bool Esp32Camera::SetGc0308FactoryAuto() {
+    if (video_fd_ < 0) {
+        return false;
+    }
+
+    esp_cam_sensor_id_t chip_id = {};
+    if (!SensorPrivateIoctl(ESP_CAM_SENSOR_IOC_G_CHIP_ID,
+                            &chip_id,
+                            sizeof(chip_id),
+                            false)) {
+        ESP_LOGE(TAG, "Cannot read camera sensor ID");
+        return false;
+    }
+    if (chip_id.pid != 0x9b) {
+        ESP_LOGE(TAG,
+                 "Factory-auto setup is only for GC0308; detected PID=0x%lx",
+                 static_cast<unsigned long>(chip_id.pid));
+        return false;
+    }
+
+    // GC0308 automatic controls and color-effect registers are on page 0.
+    if (!WriteSensorRegister(0xfe, 0x00)) {
+        return false;
+    }
+
+    uint8_t auto_control = 0;
+    uint8_t aec_control = 0;
+    uint8_t effect_control = 0;
+    if (!ReadSensorRegister(0x22, auto_control) ||
+        !ReadSensorRegister(0xd2, aec_control) ||
+        !ReadSensorRegister(0x23, effect_control)) {
+        ESP_LOGE(TAG, "Failed to read GC0308 automatic-control registers");
+        return false;
+    }
+
+    // First stop AWB briefly while restoring its factory seed gains.
+    // AEC and AGC bits are preserved here.
+    const uint8_t awb_temporarily_off =
+        static_cast<uint8_t>(auto_control & ~0x02u);
+
+    if (!WriteSensorRegister(0x22, awb_temporarily_off) ||
+        !WriteSensorRegister(0x5a, 0x56) ||  // factory R seed
+        !WriteSensorRegister(0x5b, 0x40) ||  // factory G seed
+        !WriteSensorRegister(0x5c, 0x4a)) {  // factory B seed
+        ESP_LOGE(TAG, "Failed to restore GC0308 factory WB seed gains");
+        return false;
+    }
+
+    // 0x23[1:0] = 0: normal color effect (not grayscale/negative).
+    const uint8_t normal_effect =
+        static_cast<uint8_t>(effect_control & ~0x03u);
+
+    // In the Espressif and legacy tables, 0xd2 bit 7 is set when AEC is open.
+    const uint8_t aec_enabled =
+        static_cast<uint8_t>(aec_control | 0x80u);
+
+    // 0x22 bits 0/1/2 are AEC/AWB/AGC respectively.
+    const uint8_t all_auto_enabled =
+        static_cast<uint8_t>(auto_control | 0x07u);
+
+    if (!WriteSensorRegister(0x23, normal_effect) ||
+        !WriteSensorRegister(0xd2, aec_enabled) ||
+        !WriteSensorRegister(0x22, all_auto_enabled)) {
+        ESP_LOGE(TAG, "Failed to enable GC0308 AEC/AWB/AGC");
+        return false;
+    }
+
+    // Give the internal ISP a few streamed frames to begin converging.
+    vTaskDelay(pdMS_TO_TICKS(120));
+
+    uint8_t rb_auto = 0;
+    uint8_t rb_aec = 0;
+    uint8_t rb_effect = 0;
+    uint8_t rb_r = 0;
+    uint8_t rb_g = 0;
+    uint8_t rb_b = 0;
+    const bool readback_ok =
+        ReadSensorRegister(0x22, rb_auto) &&
+        ReadSensorRegister(0xd2, rb_aec) &&
+        ReadSensorRegister(0x23, rb_effect) &&
+        ReadSensorRegister(0x5a, rb_r) &&
+        ReadSensorRegister(0x5b, rb_g) &&
+        ReadSensorRegister(0x5c, rb_b);
+
+    if (!readback_ok) {
+        ESP_LOGW(TAG, "GC0308 factory-auto was written, but readback failed");
+        return true;
+    }
+
+    ESP_LOGW(TAG,
+             "GC0308 factory-auto: AAAA_EN=0x%02x "
+             "(AEC=%d AWB=%d AGC=%d), AEC_CTRL=0x%02x, "
+             "EFFECT=0x%02x, current R/G/B=0x%02x/0x%02x/0x%02x",
+             rb_auto,
+             (rb_auto & 0x01u) != 0,
+             (rb_auto & 0x02u) != 0,
+             (rb_auto & 0x04u) != 0,
+             rb_aec,
+             rb_effect,
+             rb_r,
+             rb_g,
+             rb_b);
     return true;
 }
 

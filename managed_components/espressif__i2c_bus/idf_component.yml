@@ -1,0 +1,12 @@
+dependencies:
+  cmake_utilities: '*'
+  idf: '>=4.0'
+description: The I2C Bus Driver supports both hardware and software I2C.
+documentation: https://docs.espressif.com/projects/esp-iot-solution/en/latest/basic/bus/i2c_bus.html
+issues: https://github.com/espressif/esp-iot-solution/issues
+repository: git://github.com/espressif/esp-iot-solution.git
+repository_info:
+  commit_sha: ef13dcfd5aa18c4d6dca3d89d18173f8ae180a5f
+  path: components/i2c_bus
+url: https://github.com/espressif/esp-iot-solution/tree/master/components/i2c_bus
+version: 1.5.2

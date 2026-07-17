@@ -1,10 +1,132 @@
 #include "no_audio_codec.h"
 
 #include <esp_log.h>
+#include <esp_err.h>
+#include <esp_heap_caps.h>
+#include <esp_cpu.h>
+#include <esp_ipc.h>
+#include <soc/soc_caps.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/portmacro.h>
 #include <cmath>
 #include <cstring>
 
+
 #define TAG "NoAudioCodec"
+
+namespace {
+
+constexpr uint32_t kHeapTailCanary = 0xBAAD5678;
+constexpr int kHeapWatchpointId = 0;  // FreeRTOS normally reserves the last watchpoint for stack checks.
+constexpr size_t kHeapCanarySearchBytes = 64;
+
+void* FindHeapTailCanaryBefore(const void* object) {
+    if (object == nullptr) {
+        return nullptr;
+    }
+
+    const auto* base = static_cast<const uint8_t*>(object);
+    for (size_t offset = sizeof(uint32_t);
+         offset <= kHeapCanarySearchBytes;
+         offset += sizeof(uint32_t)) {
+        const auto* candidate = reinterpret_cast<const volatile uint32_t*>(base - offset);
+        if (*candidate == kHeapTailCanary) {
+            return const_cast<uint32_t*>(
+                reinterpret_cast<const uint32_t*>(base - offset)
+            );
+        }
+    }
+
+    return nullptr;
+}
+
+struct WatchpointRequest {
+    void* address;
+    esp_err_t result;
+};
+
+// This callback may run inside the small ESP-IDF IPC task stack.
+// Keep it minimal: no logging, heap checks, or formatting here.
+void SetHeapTailWatchpointOnCurrentCore(void* arg) {
+    auto* request = static_cast<WatchpointRequest*>(arg);
+
+    esp_cpu_clear_watchpoint(kHeapWatchpointId);
+    request->result = esp_cpu_set_watchpoint(
+        kHeapWatchpointId,
+        request->address,
+        sizeof(uint32_t),
+        ESP_CPU_WATCHPOINT_STORE
+    );
+}
+
+void ArmTxNeighbourHeapWatchpoint(i2s_chan_handle_t tx_handle) {
+    void* watched_tail = FindHeapTailCanaryBefore(tx_handle);
+    if (watched_tail == nullptr) {
+        ESP_LOGE(
+            TAG,
+            "Could not find a 0xBAAD5678 heap tail within %u bytes before tx=%p; "
+            "watchpoint not installed",
+            static_cast<unsigned int>(kHeapCanarySearchBytes),
+            static_cast<void*>(tx_handle)
+        );
+        return;
+    }
+
+    const auto distance = static_cast<size_t>(
+        static_cast<const uint8_t*>(static_cast<const void*>(tx_handle)) -
+        static_cast<const uint8_t*>(watched_tail)
+    );
+
+    ESP_LOGW(
+        TAG,
+        "Watching heap tail at %p (%u bytes before tx=%p, value=0x%08x)",
+        watched_tail,
+        static_cast<unsigned int>(distance),
+        static_cast<void*>(tx_handle),
+        static_cast<unsigned int>(*static_cast<volatile uint32_t*>(watched_tail))
+    );
+
+    WatchpointRequest local_request = {
+        .address = watched_tail,
+        .result = ESP_FAIL,
+    };
+
+    SetHeapTailWatchpointOnCurrentCore(&local_request);
+
+    ESP_LOGW(
+        TAG,
+        "Local watchpoint: core=%d, address=%p, result=%s",
+        xPortGetCoreID(),
+        watched_tail,
+        esp_err_to_name(local_request.result)
+    );
+
+#if SOC_CPU_CORES_NUM > 1 && !CONFIG_FREERTOS_UNICORE
+    WatchpointRequest remote_request = {
+        .address = watched_tail,
+        .result = ESP_FAIL,
+    };
+
+    const uint32_t other_core = static_cast<uint32_t>(xPortGetCoreID() ^ 1);
+    const esp_err_t ipc_err = esp_ipc_call_blocking(
+        other_core,
+        SetHeapTailWatchpointOnCurrentCore,
+        &remote_request
+    );
+
+    // Log only after the IPC callback has returned to this normal task.
+    ESP_LOGW(
+        TAG,
+        "Remote watchpoint: core=%u, address=%p, ipc=%s, result=%s",
+        static_cast<unsigned int>(other_core),
+        watched_tail,
+        esp_err_to_name(ipc_err),
+        esp_err_to_name(remote_request.result)
+    );
+#endif
+}
+
+}  // namespace
 
 NoAudioCodec::~NoAudioCodec() {
     if (rx_handle_ != nullptr) {
@@ -71,7 +193,12 @@ NoAudioCodecDuplex::NoAudioCodecDuplex(int input_sample_rate, int output_sample_
     };
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle_, &std_cfg));
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx_handle_, &std_cfg));
-    ESP_LOGI(TAG, "Duplex channels created");
+    ESP_LOGI(
+        TAG,
+        "Duplex channels created: tx=%p, rx=%p",
+        static_cast<void*>(tx_handle_),
+        static_cast<void*>(rx_handle_)
+    );
 }
 
 
@@ -132,6 +259,12 @@ NoAudioCodecSimplex::NoAudioCodecSimplex(int input_sample_rate, int output_sampl
     };
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle_, &std_cfg));
 
+    // Light-impact heap poisoning showed a damaged tail immediately before
+    // tx_handle_. Arm a store watchpoint now, before the RX channel and camera
+    // activity can overwrite it, so the first offending write produces a useful
+    // backtrace. This diagnostic intentionally causes a Guru Meditation when hit.
+    ArmTxNeighbourHeapWatchpoint(tx_handle_);
+
     // Create a new channel for MIC
     chan_cfg.id = (i2s_port_t)1;
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, nullptr, &rx_handle_));
@@ -141,7 +274,12 @@ NoAudioCodecSimplex::NoAudioCodecSimplex(int input_sample_rate, int output_sampl
     std_cfg.gpio_cfg.dout = I2S_GPIO_UNUSED;
     std_cfg.gpio_cfg.din = mic_din;
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx_handle_, &std_cfg));
-    ESP_LOGI(TAG, "Simplex channels created");
+    ESP_LOGI(
+        TAG,
+        "Simplex channels created: tx=%p, rx=%p",
+        static_cast<void*>(tx_handle_),
+        static_cast<void*>(rx_handle_)
+    );
 }
 
 NoAudioCodecSimplex::NoAudioCodecSimplex(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, i2s_std_slot_mask_t spk_slot_mask, gpio_num_t mic_sck, gpio_num_t mic_ws, gpio_num_t mic_din, i2s_std_slot_mask_t mic_slot_mask){
@@ -201,6 +339,12 @@ NoAudioCodecSimplex::NoAudioCodecSimplex(int input_sample_rate, int output_sampl
     };
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle_, &std_cfg));
 
+    // Light-impact heap poisoning showed a damaged tail immediately before
+    // tx_handle_. Arm a store watchpoint now, before the RX channel and camera
+    // activity can overwrite it, so the first offending write produces a useful
+    // backtrace. This diagnostic intentionally causes a Guru Meditation when hit.
+    ArmTxNeighbourHeapWatchpoint(tx_handle_);
+
     // Create a new channel for MIC
     chan_cfg.id = (i2s_port_t)1;
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, nullptr, &rx_handle_));
@@ -211,7 +355,12 @@ NoAudioCodecSimplex::NoAudioCodecSimplex(int input_sample_rate, int output_sampl
     std_cfg.gpio_cfg.dout = I2S_GPIO_UNUSED;
     std_cfg.gpio_cfg.din = mic_din;
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx_handle_, &std_cfg));
-    ESP_LOGI(TAG, "Simplex channels created");
+    ESP_LOGI(
+        TAG,
+        "Simplex channels created: tx=%p, rx=%p",
+        static_cast<void*>(tx_handle_),
+        static_cast<void*>(rx_handle_)
+    );
 }
 
 int NoAudioCodec::Write(const int16_t* data, int samples) {
@@ -232,8 +381,50 @@ int NoAudioCodec::Write(const int16_t* data, int samples) {
         }
     }
 
-    size_t bytes_written;
-    ESP_ERROR_CHECK(i2s_channel_write(tx_handle_, buffer.data(), samples * sizeof(int32_t), &bytes_written, portMAX_DELAY));
+    if (tx_handle_ == nullptr) {
+        ESP_LOGE(TAG, "I2S TX failed: tx handle is null");
+        return 0;
+    }
+
+    size_t bytes_written = 0;
+    esp_err_t err = i2s_channel_write(
+        tx_handle_,
+        buffer.data(),
+        samples * sizeof(int32_t),
+        &bytes_written,
+        portMAX_DELAY
+    );
+
+    if (err != ESP_OK) {
+        const bool heap_ok = heap_caps_check_integrity_all(true);
+        const size_t internal_free = heap_caps_get_free_size(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
+        );
+        const size_t internal_largest = heap_caps_get_largest_free_block(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
+        );
+        const size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
+        ESP_LOGE(
+            TAG,
+            "I2S TX failed: %s (0x%x), tx=%p, rx=%p, same=%d, "
+            "heap_ok=%d, internal_free=%u, internal_largest=%u, psram_free=%u",
+            esp_err_to_name(err),
+            static_cast<unsigned int>(err),
+            static_cast<void*>(tx_handle_),
+            static_cast<void*>(rx_handle_),
+            tx_handle_ == rx_handle_,
+            heap_ok,
+            static_cast<unsigned int>(internal_free),
+            static_cast<unsigned int>(internal_largest),
+            static_cast<unsigned int>(psram_free)
+        );
+
+        // Keep the device alive so the log can reveal whether the I2S handle
+        // or heap was corrupted. Audio for this chunk is dropped.
+        return 0;
+    }
+
     return bytes_written / sizeof(int32_t);
 }
 
@@ -335,7 +526,12 @@ NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output
 #else
     ESP_LOGE(TAG, "PDM is not supported");
 #endif
-    ESP_LOGI(TAG, "Simplex channels created");
+    ESP_LOGI(
+        TAG,
+        "Simplex channels created: tx=%p, rx=%p",
+        static_cast<void*>(tx_handle_),
+        static_cast<void*>(rx_handle_)
+    );
 }
 
 int NoAudioCodecSimplexPdm::Read(int16_t* dest, int samples) {

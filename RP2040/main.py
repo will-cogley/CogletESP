@@ -1,86 +1,118 @@
-# motion_servo.py  (MicroPython for RP2040)
-from machine import Pin, PWM, UART
-import time, random
-import urandom
-from servoclass import Servo
-import sys, select, uselect
-import math
+# CogletESP RP2040 main loop
+import time
+import random
+
+import board
 import animation
 from animation import servos
+from coms import Comms
+from facetrack import FaceTracker
 
-ESP = UART(1, baudrate=115200, tx=Pin(4), rx=Pin(5))
-rx_buffer = b""
 
-mode = Pin(20, Pin.IN, Pin.PULL_UP)
+mode = board.mode
+LED = board.LED
 
-# track direction for each servo (1 = going to max, -1 = going to min)
-directions = {name: 1 for name in servos.keys()}
+LED_oscillator = 25
+LED_countdown = LED_oscillator
+
+blink_time = 500
+blinking = False
+
+speaking_flag = False
+bool_a = False
+last_toggle_a = time.ticks_ms()
+
+external = Comms()
+face_tracker = FaceTracker(external)
 
 last_time = time.ticks_ms()
-last_switch = last_time
 
-# servos["YAW"].set_target(88)
-# # servos["RWH"].set_target(89)
+# Original staggered startup, now isolated in board.py.
+board.initialize_servos(animation)
+
+FTDebug = False  # True isolates the face-tracking code.
 
 
 while True:
     now = time.ticks_ms()
     dt = time.ticks_diff(now, last_time) / 1000.0
     last_time = now
-    
-#     # check if blink should finish
-#     update_blink(servos, now, lid="LID")
-    
-    if ESP.any():
-        rx_buffer += ESP.read()   # bytes + bytes = OK
-        while b"\n" in rx_buffer:
-            line, rx_buffer = rx_buffer.split(b"\n", 1)
-            rcvstate = line.decode().strip()
-            print("RX:", rcvstate)
-            if rcvstate in animation.state_map:
-                print("applying ", end="")
-                print(rcvstate)
+
+    if FTDebug == False:
+        # Grab every pending state command from the ESP32.
+        incoming_commands = external.esp_read()
+        for data in incoming_commands:
+            if data in animation.state_map:
                 animation.new_state_flag = True
-                animation.current_state = rcvstate
-                
-    
-#     if (mode.value() == 0):
-#         animation.apply_state("state_limber_up")
+                animation.current_state = data
 
-    if (mode.value() == 1):
-        animation.apply_pose("pose_calibrate")
-    
-    animation.apply_state(animation.current_state)
+        # Detect state changes.
+        if animation.current_state != animation.previous_state:
+            if animation.current_state == "speaking":
+                speaking_flag = True
+            elif animation.current_state in [
+                "neutral",
+                "idle",
+                "listening",
+            ]:
+                if speaking_flag:
+                    speaking_flag = False
+                    animation.servos["MOU"].set_target(130)
 
-    for s in servos.values():
-        s.update(dt)
-    time.sleep_ms(1)
-    
-#     # EXAMPLE: randomly trigger a blink
-#     if not blink_state["active"] and (random.randint(0, 1000)<1):
-#         trigger_blink(servos, now, closed_angle=30, lid="LID")
+        # Original 250 ms speaking mouth flap.
+        if speaking_flag:
+            if bool_a == False:
+                animation.servos["MOU"].set_target(130)
+            elif bool_a == True:
+                animation.servos["MOU"].set_target(70)
 
-# blink_state = {
-#     "active": False,
-#     "start_time": 0,
-#     "duration": 150,   # ms lids stay closed
-#     "original_pos": None,
-# }
-# 
-# 
-# 
-# def trigger_blink(servos, now, closed_angle=30, lid="LID"):
-#     if blink_state["active"]:
-#         return  # already blinking, ignore
-#     s = servos["LID"]
-#     blink_state["active"] = True
-#     blink_state["start_time"] = now
-#     blink_state["original_pos"] = s.target  # remember current target
-#     s.set_target(s.min_angle)  # snap to closed target
-# 
-# def update_blink(servos, now, lid="LID"):
-#     if blink_state["active"]:
-#         if time.ticks_diff(now, blink_state["start_time"]) > blink_state["duration"]:
-#             s = servos[lid]
-#             s.set_target(blink_state["original_pos"])  # restore old target
-#             blink_state["active"] = False
+            if time.ticks_diff(now, last_toggle_a) >= 250:
+                bool_a = not bool_a
+                last_toggle_a = now
+
+        # Original random blink trigger.
+        if not blinking and random.randrange(500) == 0:
+            blinking = True
+            blink_counter = blink_time
+
+        # Calibration mode.
+        if mode.value() == 1:
+            animation.current_state = "state_calibrate"
+            animation.apply_state("state_calibrate")
+            LED_countdown -= 1
+            if LED_countdown <= 0:
+                LED.toggle()
+                LED_countdown = LED_oscillator
+        else:
+            if animation.current_state == "idle":
+                animation.apply_state("idle")
+                animation.servos["LID"]._write_pwm(30)
+            else:
+                if animation.previous_state == "idle":
+                    animation.servos["LID"]._write_pwm(110)
+                    animation.servos["PIT"].set_target(10)
+
+                if blinking and animation.current_state != "idle":
+                    if blink_counter > blink_time - 50:
+                        animation.servos["LID"]._write_pwm(30)
+                    elif blink_counter > 0:
+                        animation.servos["LID"]._write_pwm(110)
+
+                    blink_counter -= 1
+                    if blink_counter == 0:
+                        blinking = False
+
+                animation.apply_state(animation.current_state)
+
+        animation.previous_state = animation.current_state
+    else:
+        animation.servos["LID"]._write_pwm(110)
+        animation.current_state = "neutral"
+
+    face_tracker.update()
+
+    # Eyelid is written directly by blink/sleep logic.
+    for name, servo in servos.items():
+        if name == "LID":
+            continue
+        servo.update(dt)

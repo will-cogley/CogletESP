@@ -1,0 +1,11 @@
+dependencies:
+  lvgl/lvgl: '>=9.0'
+description: Otto robot GIF emoji resource pack - 6 animated GIF emojis (gifs folder
+  only)
+license: MIT
+repository: git://github.com/txp666/otto-emoji-gif-component.git
+repository_info:
+  commit_sha: 3c52baa07184e85194eb22661383ffa4adcce992
+  path: .
+url: https://github.com/txp666/otto-emoji-gif-component
+version: 1.1.1

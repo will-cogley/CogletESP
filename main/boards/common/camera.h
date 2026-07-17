@@ -5,6 +5,7 @@
 
 class Camera {
 public:
+      virtual ~Camera() = default;
     virtual void SetExplainUrl(const std::string& url, const std::string& token) = 0;
     virtual bool Capture() = 0;
     virtual bool SetHMirror(bool enabled) = 0;

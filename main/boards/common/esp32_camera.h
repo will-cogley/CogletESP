@@ -1,5 +1,6 @@
 #pragma once
 #include "sdkconfig.h"
+#include <cstdint>
 
 #ifndef CONFIG_IDF_TARGET_ESP32
 #include <lvgl.h>
@@ -35,21 +36,32 @@ private:
 #endif  // CONFIG_XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
     int video_fd_ = -1;
     bool streaming_on_ = false;
+    bool video_initialized_ = false;
     struct MmapBuffer { void *start = nullptr; size_t length = 0; };
     std::vector<MmapBuffer> mmap_buffers_;
     std::string explain_url_;
     std::string explain_token_;
     std::thread encoder_thread_;
 
+    bool SensorPrivateIoctl(uint32_t command, void* data, size_t size, bool write);
+    bool ReadSensorRegister(uint16_t reg, uint8_t& value);
+    bool WriteSensorRegister(uint16_t reg, uint8_t value);
+
 public:
     Esp32Camera(const esp_video_init_config_t& config);
-    ~Esp32Camera();
+    ~Esp32Camera() override;
 
     virtual void SetExplainUrl(const std::string& url, const std::string& token);
     virtual bool Capture();
     // 翻转控制函数
     virtual bool SetHMirror(bool enabled) override;
     virtual bool SetVFlip(bool enabled) override;
+
+    // Restore the GC0308 internal ISP to a controlled automatic baseline:
+    // AEC + AWB + AGC enabled, normal color effect, factory WB seed gains.
+    bool SetGc0308FactoryAuto();
+
+    bool IsInitialized() const { return video_initialized_ && video_fd_ >= 0; }
     virtual std::string Explain(const std::string& question);
 };
 
