@@ -46,6 +46,9 @@ private:
     bool SensorPrivateIoctl(uint32_t command, void* data, size_t size, bool write);
     bool ReadSensorRegister(uint16_t reg, uint8_t& value);
     bool WriteSensorRegister(uint16_t reg, uint8_t value);
+#ifdef CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_CAM
+    bool ApplyCogletGc0308VendorProfile();
+#endif
 
 public:
     Esp32Camera(const esp_video_init_config_t& config);

@@ -1,6 +1,0 @@
-dist/
-build/
-sdkconfig
-sdkconfig.old
-.vscode/
-examples/.vscode/
